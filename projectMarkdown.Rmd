@@ -1,0 +1,217 @@
+---
+title: "Heart Failure Analysis Project"
+author: "Marko Jankovic 89171038"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+bibliography: bibliography.bib
+nocite: "@*"
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning = FALSE, error = T)
+library(tidyverse)
+library(gt)
+```
+
+# Description of the problem
+
+Cardiovascular diseases (CVDs) are the number 1 cause of death globally, taking an estimated 17.9 million lives each year, which accounts for 31% of all deaths worlwide.
+Heart failure is a common event caused by CVDs and this dataset contains 12 features that can be used to predict mortality by heart failure.
+
+Most cardiovascular diseases can be prevented by addressing behavioural risk factors such as tobacco use, unhealthy diet and obesity, physical inactivity and harmful use of alcohol using population-wide strategies.
+
+People with cardiovascular disease or who are at high cardiovascular risk (due to the presence of one or more risk factors such as hypertension, diabetes, hyperlipidaemia or already established disease) need early detection and management wherein a machine learning model can be of great help.
+
+# Presentation of the data
+
+### About data
+
+This dataset consists of 299 patients and 13 columns containing some information about the patients. It contains patients information such as age, sex, is he/she a smoker, as well as anaemia, blood pressure, ejection fraction, creatinine phosphokinase, diabetes, serum creatinine, serum sodium, platelets, time and we need to predict DEATH EVENT.
+
+```{r explore}
+df <- read_csv("data/heart_failure_clinical_records_dataset.csv")
+df %>% head(10) %>% gt
+```
+<br />
+
+* Age: Age of the patient
+* Anaemia 
+  + Patient has anaemia = 1
+  + Patient does not have anaemia = 0
+* Creatinine_phosphokinase: Level of the CPK enzyme in the blood (mcg/L)
+* Diabetes
+  + Patient has diabetes = 1
+  + Patient does not have diabetes = 0
+* Ejection_fraction: Percentage of blood leaving the heart at each contraction (percentage)
+* High_blood_pressure
+  + Hypertension = 1
+  + No hypertension = 0
+* Platelets: Platelets in the blood (kiloplatelets/mL)
+* Serum_creatinine: Level of serum creatinine in the blood (mg/dL)
+* Serum_sodium: Level of serum sodium in the blood (mEq/L)
+* Sex: Gender of the patient
+  + Female = 0
+  + Male = 1
+* Smoking
+  + Smoker = 1
+  + Non-smoker = 0
+* Time: Follow-up period
+* DEATH_EVENT
+  + Deceased in the follow-up period = 1
+  + Alive = 0
+
+# Exploratory data analysis & Visualisation
+
+### Gender factor
+
+In this dataset there are 194 male patients and 105 female subjects. For female patients the death event has a chance of 32.38% while the male patients have a death event chance of 31.96%.
+
+```{r gender_factor}
+deaths_by_gender <- df %>%
+  select(sex, DEATH_EVENT) %>%
+  filter(DEATH_EVENT == 1) %>%
+  group_by(sex) %>%
+  summarise(deaths = n())
+
+alive_by_gender <- df %>%
+  filter(DEATH_EVENT == 0) %>%
+  group_by(sex) %>%
+  summarise(alive = n()) %>%
+  select(alive)
+
+gender_total <- cbind(deaths_by_gender, alive_by_gender)
+gender_total %>% gt
+```
+
+### Age factor
+
+Patients in the data set are over 40 years old, and we can see that the probability of death event increases with the age increase.
+
+```{r age_factor}
+a <- df %>% ggplot(aes(x = age)) + geom_histogram(color = "black", fill = "white") + labs(title = "Age distribution")
+b <- df %>%
+  mutate(int = cut(as.integer(age),breaks = c(40, 50, 60, 70, 80, 90, 100), include.lowest = TRUE)) %>%
+  group_by(int, DEATH_EVENT) %>%
+  ggplot(aes(x = int, fill = factor(DEATH_EVENT))) + geom_bar() + xlab("Age groups") + scale_fill_manual("Death Event", values = c("#999999", "#E69F00"), labels = c("No", "Yes"))
+
+gridExtra::grid.arrange(a,b)
+```
+
+### Diseases & smoking factor
+
+Regarding diseases related to heart failure, anaemia and high blood pressure have notable differences for the different death events which are significant in how they affect death events. As we can see from the plot below, diabetes and smoking are not a factor at all for this dataset.
+
+```{r diseases}
+anaemia <- df %>% 
+  ggplot(aes(x = factor(DEATH_EVENT), fill = factor(anaemia))) + geom_bar(position = "fill") + scale_x_discrete(labels = c("Death Event:No","Death Event:Yes")) + scale_fill_manual(values = c("#999999", "#E69F00"), name = "Anaemia", labels = c("No","Yes")) + labs(subtitle = "Anaemia") + xlab("")
+
+diabetes <- df %>%
+  ggplot(aes(x = factor(DEATH_EVENT), fill = factor(diabetes))) + geom_bar(position = "fill") + scale_x_discrete(labels = c("Death Event:No","Death Event:Yes")) + scale_fill_manual(values = c("#999999", "#E69F00"), name = "Diabetes", labels = c("No","Yes")) + labs(subtitle = "Diabetes")  + xlab("")
+
+blood_pressure <- df %>%
+  ggplot(aes(x = factor(DEATH_EVENT), fill = factor(high_blood_pressure))) + geom_bar(position = "fill") + scale_x_discrete(labels = c("Death Event:No","Death Event:Yes")) + scale_fill_manual(values = c("#999999", "#E69F00"), name = "High BP", labels = c("No","Yes")) + labs(subtitle = "High BP") + xlab("")
+
+smoking <- df %>%
+  ggplot(aes(x = factor(DEATH_EVENT), fill = factor(smoking))) + geom_bar(position = "fill") + scale_x_discrete(labels= c("Death Event:No","Death Event:Yes"))+scale_fill_manual(values = c("#999999", "#E69F00"), name = "Smoking", labels = c("No","Yes")) + labs(subtitle = "Smoking") + xlab("")
+  
+
+gridExtra::grid.arrange(anaemia, diabetes, blood_pressure, smoking, nrow = 2)
+```
+
+### Creatinine phosphokinase
+
+Although the distribution for the death event and non-death event are similar average creatinine for the death event is slightly higher and we can see from the graph below that with creatinine greater than 4000 there is a 57% chance of death.
+
+```{r creatinine}
+df %>% 
+  ggplot(aes(x = creatinine_phosphokinase, fill = factor(DEATH_EVENT))) + geom_density(alpha = 0.5) + scale_fill_manual("Death Event", values = c("#999999", "#E69F00"), labels = c("No", "Yes")) + labs(title = "Density distribution of creatinine phosphokinase")
+```
+
+### Ejection fraction
+
+Ejection fraction (EF) is a measurement, expressed as a percentage, of how much blood the left ventricle pumps out with each contraction. An ejection fraction of 60 percent means that 60 percent of the total amount of blood in the left ventricle is pushed out with each heartbeat.
+
+This indication of how well the heart is pumping out blood can help to diagnose and track heart failure. A normal heart’s ejection fraction may be between 50 and 70 percent.
+
+Ejection Fraction is notably lower where there is a death event.
+
+```{r ejection}
+df %>% 
+  ggplot(aes(x = ejection_fraction, fill = factor(DEATH_EVENT))) + geom_density(alpha = 0.5) +
+  scale_fill_manual("Death Event", values = c("#999999", "#E69F00"), labels = c("No", "Yes")) +
+  scale_x_continuous(breaks = seq(20,80,10))
+```
+
+### Platelets
+
+Distribution of the platelets is almost similar to the death events.
+
+```{r platelets}
+df %>% 
+  ggplot(aes(x = platelets, fill = factor(DEATH_EVENT))) + geom_density(alpha = 0.5) + scale_fill_manual("Death Event",values = c("#999999", "#E69F00"), labels = c("No", "Yes"))
+```
+
+
+### Serum Creatinine
+
+A serum creatinine test measures the level of creatinine in your blood and provides an estimate of how well your kidneys filter (glomerular filtration rate). The normal range for creatinine in the blood may be 0.84 to 1.21 mg/dL
+
+* Level of Serum Creatinine (in all subjects) range from 0.5 to 9.4 mg/dL, with mean 1.394 and median 1.1
+* Mean values of Serum Creatinine (mg/dL) are 1.18 for non-death events and 1.84 for death events
+* When serum creatinine levels are greater than 2.5, chances of death > 60%
+
+```{r serum_c}
+df %>% 
+  ggplot(aes(x = serum_creatinine, fill = factor(DEATH_EVENT))) + geom_density(alpha = 0.5) + scale_fill_manual("Death Event",values = c("#999999", "#E69F00"), labels = c("No", "Yes"))
+```
+
+### Serum Sodium
+
+A normal blood sodium level is between 135 and 145 milliequivalents per liter (mEq/L). A serum sodium concentration of <135 mEq/L and is one of the most common biochemical disorders featured in heart failure patients.
+
+* Level of Serum Sodium (in all subjects) range from 113.0 to 148.0 mEq/L, with mean 136.6 and median 137.0
+* Mean values of Serum Sodium (mEq/L) are 137.2 for non-death events and 135.4 for death events
+
+```{r serum_s}
+df %>%
+  ggplot(aes(x = serum_sodium, fill = factor(DEATH_EVENT))) + geom_density(alpha = 0.5) + scale_fill_manual("Death Event", values = c("#999999", "#E69F00"), labels = c("No", "Yes"))
+```
+
+# Interpretation / Conclusion
+
+From the Exploratory Data Analysis, we can conclude some significant correlations between categories and death events. In the case of Creatinine Phosphokinase, there is a 60% chance of death event which we can see from the table below, and it is consistent with the data from the graph we saw earlier. We can also see the ejection fraction and it is usually lower in the case of death events.
+
+We can also see that 1/6th of the anemic patients also manifest high blood pressure and are mainly people older than 60.
+
+Based on our data we also saw no correlation between diabetes and death events.
+
+
+```{r conclusion}
+df %>% 
+  filter(creatinine_phosphokinase > 4000) %>%
+  select(creatinine_phosphokinase, ejection_fraction, DEATH_EVENT) %>%
+  gt
+
+df %>%
+  filter(anaemia == 1 & high_blood_pressure == 1) %>%
+  select(age, anaemia, ejection_fraction, high_blood_pressure)
+
+df %>%
+  filter(DEATH_EVENT == 1) %>%
+  group_by(time) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(x = time, y = count)) + geom_line()
+
+```
+
+From the plot above, we can see that most of the patients die in the first 50 days of their checkup, with the most deaths occurring in the first 20 days.
+
+# References
